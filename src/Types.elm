@@ -1,7 +1,6 @@
-module Types exposing (..)
+module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), ToBackend(..), ToFrontend(..))
 
 import Browser exposing (UrlRequest)
-import Browser.Navigation exposing (Key)
 import Countries exposing (Country)
 import Dict exposing (Dict)
 import Lamdera exposing (ClientId, SessionId)

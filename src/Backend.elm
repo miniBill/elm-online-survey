@@ -1,10 +1,16 @@
-module Backend exposing (..)
+module Backend exposing (app)
 
 import Dict
 import Lamdera exposing (ClientId, SessionId)
-import Types exposing (..)
+import Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ToBackend(..), ToFrontend(..))
 
 
+app :
+    { init : ( BackendModel, Cmd BackendMsg )
+    , update : BackendMsg -> BackendModel -> ( BackendModel, Cmd BackendMsg )
+    , updateFromFrontend : SessionId -> ClientId -> ToBackend -> BackendModel -> ( BackendModel, Cmd BackendMsg )
+    , subscriptions : BackendModel -> Sub BackendMsg
+    }
 app =
     Lamdera.backend
         { init = init
@@ -33,6 +39,7 @@ update msg model =
             ( model, Lamdera.sendToFrontend clientId (SetCurrentQuestion model.currentQuestion) )
 
 
+convertModelToAdminUpdate : BackendModel -> AdminData
 convertModelToAdminUpdate model =
     { howAreYou = Dict.values model.howAreYou
     , howExperiencedAreYouWithElm = Dict.values model.howExperiencedAreYouWithElm
@@ -46,6 +53,7 @@ updateFromFrontend sessionId _ msg model =
     case msg of
         ChoseHowAreYou happiness ->
             let
+                newModel : BackendModel
                 newModel =
                     { model | howAreYou = Dict.insert sessionId happiness model.howAreYou }
             in
@@ -53,6 +61,7 @@ updateFromFrontend sessionId _ msg model =
 
         ChoseHowExperiencedAreYouWithElm experienceLevel ->
             let
+                newModel : BackendModel
                 newModel =
                     { model | howExperiencedAreYouWithElm = Dict.insert sessionId experienceLevel model.howExperiencedAreYouWithElm }
             in
@@ -60,6 +69,7 @@ updateFromFrontend sessionId _ msg model =
 
         ChoseHowExperiencedAreYouWithProgramming experienceLevel ->
             let
+                newModel : BackendModel
                 newModel =
                     { model
                         | howExperiencedAreYouWithProgramming =
@@ -70,6 +80,7 @@ updateFromFrontend sessionId _ msg model =
 
         ChoseWhatCountryAreYouFrom country ->
             let
+                newModel : BackendModel
                 newModel =
                     { model | whatCountryAreYouFrom = Dict.insert sessionId country model.whatCountryAreYouFrom }
             in

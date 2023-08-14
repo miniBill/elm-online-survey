@@ -1,4 +1,4 @@
-module Frontend exposing (..)
+module Frontend exposing (app)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
@@ -9,16 +9,23 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Env
-import Html
-import Html.Attributes as Attr
 import Lamdera
 import List.Extra as List
-import Types exposing (..)
+import Types exposing (AdminData, CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), ToBackend(..), ToFrontend(..))
 import Url
 import Url.Parser
 import Url.Parser.Query
 
 
+app :
+    { init : Lamdera.Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
+    , view : FrontendModel -> Browser.Document FrontendMsg
+    , update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+    , updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+    , subscriptions : FrontendModel -> Sub FrontendMsg
+    , onUrlRequest : UrlRequest -> FrontendMsg
+    , onUrlChange : Url.Url -> FrontendMsg
+    }
 app =
     Lamdera.frontend
         { init = init
@@ -26,7 +33,7 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Sub.none
+        , subscriptions = \_ -> Sub.none
         , view = view
         }
 
@@ -63,13 +70,13 @@ update msg model =
     case msg of
         UrlClicked urlRequest ->
             case urlRequest of
-                Internal url ->
+                Internal _ ->
                     ( model, Cmd.none )
 
                 External url ->
                     ( model, Browser.Navigation.load url )
 
-        UrlChanged url ->
+        UrlChanged _ ->
             ( model, Cmd.none )
 
         PressedHowAreYou happiness ->
@@ -267,6 +274,7 @@ adminAnswers toString possibleAnswers answers_ =
     List.filterMap
         (\answer ->
             let
+                count : Int
                 count =
                     List.count ((==) answer) answers_
             in
@@ -316,25 +324,28 @@ questionView question =
 
 countryToString : Country -> String
 countryToString country =
-    if country.name == "United Kingdom of Great Britain and Northern Ireland" then
-        country.flag ++ " United Kingdom"
-
-    else
-        country.flag ++ " " ++ country.name
+    country.flag ++ " " ++ country.name
 
 
+countryAnswers : List Country
 countryAnswers =
     Countries.all
+        |> List.sortBy .name
         |> List.map
             (\country ->
-                if country.code == "TW" then
-                    { country | name = "Taiwan" }
+                case country.code of
+                    "TW" ->
+                        { country | name = "Taiwan" }
 
-                else
-                    country
+                    "GB" ->
+                        { country | name = "United Kingdom" }
+
+                    _ ->
+                        country
             )
 
 
+experienceLevelAnswers : List ExperienceLevel
 experienceLevelAnswers =
     [ Expert, Intermediate, Beginner ]
 
@@ -359,10 +370,12 @@ questionContainer title answers_ =
         [ title, answers_ ]
 
 
+happinessQuestionTitle : Element msg
 happinessQuestionTitle =
     Element.paragraph [ Element.Font.center ] [ Element.text "How are you doing?" ]
 
 
+happinessAnswers : List Happiness
 happinessAnswers =
     [ Good, NotGood ]
 
@@ -383,6 +396,7 @@ answers onPress toString options selected =
         (List.map
             (\option ->
                 let
+                    text : String
                     text =
                         toString option
                 in
