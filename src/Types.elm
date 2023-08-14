@@ -1,7 +1,6 @@
-module Types exposing (..)
+module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), Screen, ToBackend(..), ToFrontend(..))
 
 import Browser exposing (UrlRequest)
-import Browser.Navigation exposing (Key)
 import Countries exposing (Country)
 import Dict exposing (Dict)
 import Lamdera exposing (ClientId, SessionId)
@@ -10,7 +9,13 @@ import Url exposing (Url)
 
 type FrontendModel
     = IsAdmin CurrentQuestion AdminData
-    | IsUser Question
+    | IsUser Screen Question
+
+
+type alias Screen =
+    { width : Int
+    , height : Int
+    }
 
 
 type Question
@@ -56,6 +61,7 @@ type FrontendMsg
     | PressedWhatCountryAreYouFrom Country
     | AdminPressedNextQuestion
     | AdminPressedReset
+    | ScreenSize Int Int
 
 
 type ToBackend

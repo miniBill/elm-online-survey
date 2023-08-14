@@ -1,6 +1,8 @@
-module Frontend exposing (..)
+module Frontend exposing (app)
 
 import Browser exposing (UrlRequest(..))
+import Browser.Dom
+import Browser.Events
 import Browser.Navigation
 import Countries exposing (Country)
 import Element exposing (Element)
@@ -9,16 +11,24 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Env
-import Html
-import Html.Attributes as Attr
 import Lamdera
 import List.Extra as List
-import Types exposing (..)
+import Task
+import Types exposing (AdminData, CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), Screen, ToBackend(..), ToFrontend(..))
 import Url
 import Url.Parser
 import Url.Parser.Query
 
 
+app :
+    { init : Lamdera.Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
+    , view : FrontendModel -> Browser.Document FrontendMsg
+    , update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+    , updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+    , subscriptions : FrontendModel -> Sub FrontendMsg
+    , onUrlRequest : UrlRequest -> FrontendMsg
+    , onUrlChange : Url.Url -> FrontendMsg
+    }
 app =
     Lamdera.frontend
         { init = init
@@ -26,7 +36,7 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Sub.none
+        , subscriptions = subscriptions
         , view = view
         }
 
@@ -38,6 +48,13 @@ decodeUrl =
 
 init : Url.Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
 init url key =
+    let
+        defaultScreen : Screen
+        defaultScreen =
+            { width = 1024
+            , height = 768
+            }
+    in
     ( case Url.Parser.parse decodeUrl url of
         Just (Just secret) ->
             if secret == Env.secret then
@@ -50,11 +67,20 @@ init url key =
                     }
 
             else
-                IsUser (HowAreYou Nothing)
+                IsUser defaultScreen (HowAreYou Nothing)
 
         _ ->
-            IsUser (HowAreYou Nothing)
-    , Browser.Navigation.replaceUrl key (Url.toString { url | query = Nothing })
+            IsUser defaultScreen (HowAreYou Nothing)
+    , Cmd.batch
+        [ Browser.Navigation.replaceUrl key (Url.toString { url | query = Nothing })
+        , Browser.Dom.getViewport
+            |> Task.perform
+                (\{ viewport } ->
+                    ScreenSize
+                        (floor viewport.width)
+                        (floor viewport.height)
+                )
+        ]
     )
 
 
@@ -63,13 +89,13 @@ update msg model =
     case msg of
         UrlClicked urlRequest ->
             case urlRequest of
-                Internal url ->
+                Internal _ ->
                     ( model, Cmd.none )
 
                 External url ->
                     ( model, Browser.Navigation.load url )
 
-        UrlChanged url ->
+        UrlChanged _ ->
             ( model, Cmd.none )
 
         PressedHowAreYou happiness ->
@@ -77,10 +103,10 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Cmd.none )
 
-                IsUser question ->
+                IsUser screen question ->
                     case question of
                         HowAreYou _ ->
-                            ( Just happiness |> HowAreYou |> IsUser
+                            ( Just happiness |> HowAreYou |> IsUser screen
                             , Lamdera.sendToBackend (ChoseHowAreYou happiness)
                             )
 
@@ -92,10 +118,10 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Cmd.none )
 
-                IsUser question ->
+                IsUser screen question ->
                     case question of
                         HowExperiencedAreYouWithElm _ ->
-                            ( Just experienceLevel |> HowExperiencedAreYouWithElm |> IsUser
+                            ( Just experienceLevel |> HowExperiencedAreYouWithElm |> IsUser screen
                             , Lamdera.sendToBackend (ChoseHowExperiencedAreYouWithElm experienceLevel)
                             )
 
@@ -107,10 +133,10 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Cmd.none )
 
-                IsUser question ->
+                IsUser screen question ->
                     case question of
                         HowExperiencedAreYouWithProgramming _ ->
-                            ( Just experienceLevel |> HowExperiencedAreYouWithProgramming |> IsUser
+                            ( Just experienceLevel |> HowExperiencedAreYouWithProgramming |> IsUser screen
                             , Lamdera.sendToBackend (ChoseHowExperiencedAreYouWithProgramming experienceLevel)
                             )
 
@@ -122,10 +148,10 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Cmd.none )
 
-                IsUser question ->
+                IsUser screen question ->
                     case question of
                         WhatCountryAreYouFrom _ ->
-                            ( Just country |> WhatCountryAreYouFrom |> IsUser
+                            ( Just country |> WhatCountryAreYouFrom |> IsUser screen
                             , Lamdera.sendToBackend (ChoseWhatCountryAreYouFrom country)
                             )
 
@@ -137,7 +163,7 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Lamdera.sendToBackend AdminRequestNextQuestion )
 
-                IsUser _ ->
+                IsUser _ _ ->
                     ( model, Cmd.none )
 
         AdminPressedReset ->
@@ -145,8 +171,16 @@ update msg model =
                 IsAdmin _ _ ->
                     ( model, Lamdera.sendToBackend AdminRequestReset )
 
-                IsUser _ ->
+                IsUser _ _ ->
                     ( model, Cmd.none )
+
+        ScreenSize width height ->
+            case model of
+                IsAdmin _ _ ->
+                    ( model, Cmd.none )
+
+                IsUser _ question ->
+                    ( IsUser { width = width, height = height } question, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -157,7 +191,7 @@ updateFromBackend msg model =
                 IsAdmin currentQuestion _ ->
                     ( IsAdmin currentQuestion answerData, Cmd.none )
 
-                IsUser _ ->
+                IsUser _ _ ->
                     ( model, Cmd.none )
 
         SetCurrentQuestion question ->
@@ -165,8 +199,8 @@ updateFromBackend msg model =
                 IsAdmin _ adminData ->
                     ( IsAdmin question adminData, Cmd.none )
 
-                IsUser _ ->
-                    ( currentQuestionToQuestion question |> IsUser, Cmd.none )
+                IsUser screen _ ->
+                    ( currentQuestionToQuestion question |> IsUser screen, Cmd.none )
 
 
 currentQuestionToQuestion : CurrentQuestion -> Question
@@ -216,8 +250,8 @@ view model =
                             }
                         ]
 
-                IsUser question ->
-                    questionView question
+                IsUser screen question ->
+                    questionView screen question
             )
         ]
     }
@@ -267,6 +301,7 @@ adminAnswers toString possibleAnswers answers_ =
     List.filterMap
         (\answer ->
             let
+                count : Int
                 count =
                     List.count ((==) answer) answers_
             in
@@ -290,51 +325,63 @@ adminAnswers toString possibleAnswers answers_ =
         |> Element.wrappedRow [ Element.spacing 8, Element.centerX ]
 
 
-questionView : Question -> Element FrontendMsg
-questionView question =
+questionView : Screen -> Question -> Element FrontendMsg
+questionView screen question =
     case question of
         HowAreYou maybeHappiness ->
             questionContainer
                 happinessQuestionTitle
-                (answers PressedHowAreYou happinessToString happinessAnswers maybeHappiness)
+                (answers { onPress = PressedHowAreYou, toString = happinessToString, options = happinessAnswers, selected = maybeHappiness, columns = Nothing })
 
         HowExperiencedAreYouWithElm maybeExperienceLevel ->
             questionContainer
                 howExperiencedAreYouWithElmTitle
-                (answers PressedHowExperiencedAreYouWithElm experienceLevelToString experienceLevelAnswers maybeExperienceLevel)
+                (answers { onPress = PressedHowExperiencedAreYouWithElm, toString = experienceLevelToString, options = experienceLevelAnswers, selected = maybeExperienceLevel, columns = Nothing })
 
         HowExperiencedAreYouWithProgramming maybeExperienceLevel ->
             questionContainer
                 howExperiencedAreYouWithProgrammingTitle
-                (answers PressedHowExperiencedAreYouWithProgramming experienceLevelToString experienceLevelAnswers maybeExperienceLevel)
+                (answers { onPress = PressedHowExperiencedAreYouWithProgramming, toString = experienceLevelToString, options = experienceLevelAnswers, selected = maybeExperienceLevel, columns = Nothing })
 
         WhatCountryAreYouFrom maybeCountry ->
             questionContainer
                 countryQuestionTitle
-                (answers PressedWhatCountryAreYouFrom countryToString countryAnswers maybeCountry)
+                (answers
+                    { onPress = PressedWhatCountryAreYouFrom
+                    , toString = countryToString
+                    , options = countryAnswers
+                    , selected = maybeCountry
+
+                    -- The maximum width of a button is 301, intra-column spacing is 8
+                    , columns = Just <| max 1 <| (screen.width + 8) // (301 + 8)
+                    }
+                )
 
 
 countryToString : Country -> String
 countryToString country =
-    if country.name == "United Kingdom of Great Britain and Northern Ireland" then
-        country.flag ++ " United Kingdom"
-
-    else
-        country.flag ++ " " ++ country.name
+    country.flag ++ " " ++ country.name
 
 
+countryAnswers : List Country
 countryAnswers =
     Countries.all
+        |> List.sortBy .name
         |> List.map
             (\country ->
-                if country.code == "TW" then
-                    { country | name = "Taiwan" }
+                case country.code of
+                    "TW" ->
+                        { country | name = "Taiwan" }
 
-                else
-                    country
+                    "GB" ->
+                        { country | name = "United Kingdom" }
+
+                    _ ->
+                        country
             )
 
 
+experienceLevelAnswers : List ExperienceLevel
 experienceLevelAnswers =
     [ Expert, Intermediate, Beginner ]
 
@@ -359,10 +406,12 @@ questionContainer title answers_ =
         [ title, answers_ ]
 
 
+happinessQuestionTitle : Element msg
 happinessQuestionTitle =
     Element.paragraph [ Element.Font.center ] [ Element.text "How are you doing?" ]
 
 
+happinessAnswers : List Happiness
 happinessAnswers =
     [ Good, NotGood ]
 
@@ -377,39 +426,108 @@ happinessToString howAreYou =
             "Not good"
 
 
-answers : (a -> msg) -> (a -> String) -> List a -> Maybe a -> Element msg
-answers onPress toString options selected =
-    Element.wrappedRow [ Element.spacing 8, Element.centerX, Element.width Element.fill ]
-        (List.map
-            (\option ->
-                let
-                    text =
-                        toString option
-                in
-                Element.Input.button
-                    [ Element.Background.color
-                        (if selected == Just option then
-                            Element.rgb 0.7 0.8 0.9
+answers :
+    { onPress : option -> msg
+    , toString : option -> String
+    , options : List option
+    , selected : Maybe option
+    , columns : Maybe Int
+    }
+    -> Element msg
+answers { onPress, toString, options, selected, columns } =
+    let
+        elements : List (Element msg)
+        elements =
+            List.map
+                (\option ->
+                    let
+                        text : String
+                        text =
+                            toString option
+                    in
+                    Element.Input.button
+                        [ Element.Background.color
+                            (if selected == Just option then
+                                Element.rgb 0.7 0.8 0.9
 
-                         else
-                            Element.rgb 0.9 0.9 0.9
-                        )
-                    , Element.height Element.fill
-                    , Element.Border.width 1
-                    , Element.Border.color <| Element.rgb 0.1 0.1 0.1
-                    , Element.padding 16
-                    , if String.length text > 30 then
-                        Element.Font.size 12
+                             else
+                                Element.rgb 0.9 0.9 0.9
+                            )
+                        , Element.height Element.fill
+                        , Element.Border.width 1
+                        , Element.Border.color <| Element.rgb 0.1 0.1 0.1
+                        , Element.padding 16
+                        , if String.length text > 30 then
+                            Element.Font.size 12
 
-                      else if String.length text > 20 then
-                        Element.Font.size 16
+                          else if String.length text > 20 then
+                            Element.Font.size 16
 
-                      else
-                        Element.Font.size 20
+                          else
+                            Element.Font.size 20
+                        , if columns == Nothing then
+                            Element.width Element.shrink
+
+                          else
+                            Element.width Element.fill
+
+                        -- Prevent different font sizes from changing the height
+                        , Element.height <| Element.px 54
+                        ]
+                        { onPress = Just (onPress option)
+                        , label = Element.text text
+                        }
+                )
+                options
+    in
+    case columns of
+        Nothing ->
+            Element.wrappedRow
+                [ Element.spacing 8
+                , Element.centerX
+                , Element.width Element.fill
+                ]
+                elements
+
+        Just columnCount ->
+            elements
+                |> List.greedyGroupsOf columnCount
+                |> transpose
+                |> List.map
+                    (Element.column
+                        [ Element.spacing 8
+                        , Element.alignTop
+                        , Element.width Element.fill
+                        ]
+                    )
+                |> Element.row
+                    [ Element.spacing 8
+                    , Element.centerX
+                    , Element.width Element.fill
                     ]
-                    { onPress = Just (onPress option)
-                    , label = Element.text text
-                    }
-            )
-            options
-        )
+
+
+transpose : List (List a) -> List (List a)
+transpose lists =
+    transposeHelp [] lists
+
+
+transposeHelp : List (List a) -> List (List a) -> List (List a)
+transposeHelp acc lists =
+    case lists of
+        [] ->
+            List.reverse acc
+
+        _ ->
+            let
+                ( heads, tails ) =
+                    lists
+                        |> List.filterMap List.uncons
+                        |> List.unzip
+            in
+            transposeHelp (heads :: acc) (List.filterNot List.isEmpty tails)
+
+
+subscriptions : FrontendModel -> Sub FrontendMsg
+subscriptions _ =
+    Browser.Events.onResize ScreenSize
