@@ -14,7 +14,7 @@ import Env
 import Lamdera
 import List.Extra as List
 import Task
-import Types exposing (AdminData, CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), Screen, ToBackend(..), ToFrontend(..))
+import Types exposing (AdminData, CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), QuestionData, Screen, ToBackend(..), ToFrontend(..))
 import Url
 import Url.Parser
 import Url.Parser.Query
@@ -259,45 +259,29 @@ view model =
 
 adminQuestionView : CurrentQuestion -> AdminData -> Element FrontendMsg
 adminQuestionView currentQuestion adminData =
+    let
+        inner : QuestionData answer -> List answer -> Element msg
+        inner question data =
+            questionContainer
+                question.title
+                (adminAnswers question data)
+    in
     case currentQuestion of
         HowAreYou_ ->
-            questionContainer
-                happinessQuestionTitle
-                (adminAnswers happinessToString happinessAnswers adminData.howAreYou)
+            inner happinessQuestion adminData.howAreYou
 
         HowExperiencedAreYouWithElm_ ->
-            questionContainer
-                howExperiencedAreYouWithElmTitle
-                (adminAnswers experienceLevelToString experienceLevelAnswers adminData.howExperiencedAreYouWithElm)
+            inner elmExperienceQuestion adminData.howExperiencedAreYouWithElm
 
         HowExperiencedAreYouWithProgramming_ ->
-            questionContainer
-                howExperiencedAreYouWithProgrammingTitle
-                (adminAnswers experienceLevelToString experienceLevelAnswers adminData.howExperiencedAreYouWithProgramming)
+            inner programmingExperienceQuestion adminData.howExperiencedAreYouWithProgramming
 
         WhatCountryAreYouFrom_ ->
-            questionContainer
-                countryQuestionTitle
-                (adminAnswers countryToString countryAnswers adminData.whatCountryAreYouFrom)
+            inner countryQuestion adminData.whatCountryAreYouFrom
 
 
-howExperiencedAreYouWithElmTitle : Element msg
-howExperiencedAreYouWithElmTitle =
-    Element.paragraph [ Element.Font.center ] [ Element.text "How good are you with Elm?" ]
-
-
-howExperiencedAreYouWithProgrammingTitle : Element msg
-howExperiencedAreYouWithProgrammingTitle =
-    Element.paragraph [ Element.Font.center ] [ Element.text "How good are you at programming in general?" ]
-
-
-countryQuestionTitle : Element msg
-countryQuestionTitle =
-    Element.paragraph [ Element.Font.center ] [ Element.text "What country do you live in?" ]
-
-
-adminAnswers : (a -> String) -> List a -> List a -> Element msg
-adminAnswers toString possibleAnswers answers_ =
+adminAnswers : QuestionData answer -> List answer -> Element msg
+adminAnswers { toString, possibleAnswers } answers_ =
     List.filterMap
         (\answer ->
             let
@@ -327,114 +311,68 @@ adminAnswers toString possibleAnswers answers_ =
 
 questionView : Screen -> Question -> Element FrontendMsg
 questionView screen question =
+    let
+        inner :
+            QuestionData option
+            ->
+                { onPress : option -> msg
+                , selected : Maybe option
+                , columns : Maybe Int
+                }
+            -> Element msg
+        inner questionData options =
+            questionContainer
+                questionData.title
+                (answers questionData options)
+    in
     case question of
         HowAreYou maybeHappiness ->
-            questionContainer
-                happinessQuestionTitle
-                (answers { onPress = PressedHowAreYou, toString = happinessToString, options = happinessAnswers, selected = maybeHappiness, columns = Nothing })
+            inner happinessQuestion
+                { onPress = PressedHowAreYou
+                , selected = maybeHappiness
+                , columns = Nothing
+                }
 
         HowExperiencedAreYouWithElm maybeExperienceLevel ->
-            questionContainer
-                howExperiencedAreYouWithElmTitle
-                (answers { onPress = PressedHowExperiencedAreYouWithElm, toString = experienceLevelToString, options = experienceLevelAnswers, selected = maybeExperienceLevel, columns = Nothing })
+            inner elmExperienceQuestion
+                { onPress = PressedHowExperiencedAreYouWithElm
+                , selected = maybeExperienceLevel
+                , columns = Nothing
+                }
 
         HowExperiencedAreYouWithProgramming maybeExperienceLevel ->
-            questionContainer
-                howExperiencedAreYouWithProgrammingTitle
-                (answers { onPress = PressedHowExperiencedAreYouWithProgramming, toString = experienceLevelToString, options = experienceLevelAnswers, selected = maybeExperienceLevel, columns = Nothing })
+            inner programmingExperienceQuestion
+                { onPress = PressedHowExperiencedAreYouWithProgramming
+                , selected = maybeExperienceLevel
+                , columns = Nothing
+                }
 
         WhatCountryAreYouFrom maybeCountry ->
-            questionContainer
-                countryQuestionTitle
-                (answers
-                    { onPress = PressedWhatCountryAreYouFrom
-                    , toString = countryToString
-                    , options = countryAnswers
-                    , selected = maybeCountry
+            inner countryQuestion
+                { onPress = PressedWhatCountryAreYouFrom
+                , selected = maybeCountry
 
-                    -- The maximum width of a button is 301, intra-column spacing is 8
-                    , columns = Just <| max 1 <| (screen.width + 8) // (301 + 8)
-                    }
-                )
+                -- The maximum width of a button is 301, intra-column spacing is 8
+                , columns = Just <| max 1 <| (screen.width + 8) // (301 + 8)
+                }
 
 
-countryToString : Country -> String
-countryToString country =
-    country.flag ++ " " ++ country.name
-
-
-countryAnswers : List Country
-countryAnswers =
-    Countries.all
-        |> List.sortBy .name
-        |> List.map
-            (\country ->
-                case country.code of
-                    "TW" ->
-                        { country | name = "Taiwan" }
-
-                    "GB" ->
-                        { country | name = "United Kingdom" }
-
-                    _ ->
-                        country
-            )
-
-
-experienceLevelAnswers : List ExperienceLevel
-experienceLevelAnswers =
-    [ Expert, Intermediate, Beginner ]
-
-
-experienceLevelToString : ExperienceLevel -> String
-experienceLevelToString experienceLevel =
-    case experienceLevel of
-        Expert ->
-            "Expert"
-
-        Intermediate ->
-            "Intermediate"
-
-        Beginner ->
-            "Beginner"
-
-
-questionContainer : Element msg -> Element msg -> Element msg
+questionContainer : String -> Element msg -> Element msg
 questionContainer title answers_ =
     Element.column
         [ Element.spacing 16, Element.centerX, Element.centerY ]
-        [ title, answers_ ]
-
-
-happinessQuestionTitle : Element msg
-happinessQuestionTitle =
-    Element.paragraph [ Element.Font.center ] [ Element.text "How are you doing?" ]
-
-
-happinessAnswers : List Happiness
-happinessAnswers =
-    [ Good, NotGood ]
-
-
-happinessToString : Happiness -> String
-happinessToString howAreYou =
-    case howAreYou of
-        Good ->
-            "Good"
-
-        NotGood ->
-            "Not good"
+        [ Element.paragraph [ Element.Font.center ] [ Element.text title ], answers_ ]
 
 
 answers :
-    { onPress : option -> msg
-    , toString : option -> String
-    , options : List option
-    , selected : Maybe option
-    , columns : Maybe Int
-    }
+    QuestionData option
+    ->
+        { onPress : option -> msg
+        , selected : Maybe option
+        , columns : Maybe Int
+        }
     -> Element msg
-answers { onPress, toString, options, selected, columns } =
+answers { toString, possibleAnswers } { onPress, selected, columns } =
     let
         elements : List (Element msg)
         elements =
@@ -478,7 +416,7 @@ answers { onPress, toString, options, selected, columns } =
                         , label = Element.text text
                         }
                 )
-                options
+                possibleAnswers
     in
     case columns of
         Nothing ->
@@ -531,3 +469,74 @@ transposeHelp acc lists =
 subscriptions : FrontendModel -> Sub FrontendMsg
 subscriptions _ =
     Browser.Events.onResize ScreenSize
+
+
+elmExperienceQuestion : QuestionData ExperienceLevel
+elmExperienceQuestion =
+    { title = "How good are you with Elm?"
+    , possibleAnswers = experienceLevelAnswers
+    , toString = experienceLevelToString
+    }
+
+
+programmingExperienceQuestion : QuestionData ExperienceLevel
+programmingExperienceQuestion =
+    { title = "How good are you at programming in general?"
+    , possibleAnswers = experienceLevelAnswers
+    , toString = experienceLevelToString
+    }
+
+
+experienceLevelAnswers : List ExperienceLevel
+experienceLevelAnswers =
+    [ Expert, Intermediate, Beginner ]
+
+
+experienceLevelToString : ExperienceLevel -> String
+experienceLevelToString experienceLevel =
+    case experienceLevel of
+        Expert ->
+            "Expert"
+
+        Intermediate ->
+            "Intermediate"
+
+        Beginner ->
+            "Beginner"
+
+
+countryQuestion : QuestionData Country
+countryQuestion =
+    { title = "What country do you live in?"
+    , possibleAnswers =
+        Countries.all
+            |> List.map
+                (\country ->
+                    case country.code of
+                        "TW" ->
+                            { country | name = "Taiwan" }
+
+                        "GB" ->
+                            { country | name = "United Kingdom" }
+
+                        _ ->
+                            country
+                )
+            |> List.sortBy .name
+    , toString = \country -> country.flag ++ " " ++ country.name
+    }
+
+
+happinessQuestion : QuestionData Happiness
+happinessQuestion =
+    { title = "How are you doing?"
+    , possibleAnswers = [ Good, NotGood ]
+    , toString =
+        \howAreYou ->
+            case howAreYou of
+                Good ->
+                    "Good"
+
+                NotGood ->
+                    "Not good"
+    }
