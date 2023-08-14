@@ -1,4 +1,4 @@
-module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), Screen, ToBackend(..), ToFrontend(..))
+module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), QuestionData, Screen, ToBackend(..), ToFrontend(..))
 
 import Browser exposing (UrlRequest)
 import Countries exposing (Country)
@@ -15,6 +15,13 @@ type FrontendModel
 type alias Screen =
     { width : Int
     , height : Int
+    }
+
+
+type alias QuestionData answer =
+    { title : String
+    , toString : answer -> String
+    , possibleAnswers : List answer
     }
 
 
