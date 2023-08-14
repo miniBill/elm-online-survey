@@ -1,4 +1,4 @@
-module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), ToBackend(..), ToFrontend(..))
+module Types exposing (AdminData, BackendModel, BackendMsg(..), CurrentQuestion(..), ExperienceLevel(..), FrontendModel(..), FrontendMsg(..), Happiness(..), Question(..), Screen, ToBackend(..), ToFrontend(..))
 
 import Browser exposing (UrlRequest)
 import Countries exposing (Country)
@@ -9,7 +9,13 @@ import Url exposing (Url)
 
 type FrontendModel
     = IsAdmin CurrentQuestion AdminData
-    | IsUser Question
+    | IsUser Screen Question
+
+
+type alias Screen =
+    { width : Int
+    , height : Int
+    }
 
 
 type Question
@@ -55,6 +61,7 @@ type FrontendMsg
     | PressedWhatCountryAreYouFrom Country
     | AdminPressedNextQuestion
     | AdminPressedReset
+    | ScreenSize Int Int
 
 
 type ToBackend
